@@ -27,6 +27,7 @@ setup(
             'test = cg.teste:main',
             'maze = cg.main:game',
             'edit = cg.main:editor',
+            'autonomous_nav = cg.autonomous_nav:main',
         ],
     },
 )

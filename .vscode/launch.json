@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/heitor.candido/Documents/Ponderadas/culling_games/src/cg_autonomous/src",
+      "program": "/Users/heitor.candido/Documents/Ponderadas/culling_games/src/cg_autonomous/src/build/Debug/outDebug"
+    }
+  ]
+}

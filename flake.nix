@@ -1,40 +1,110 @@
 {
-  description = "Dev shell ROS 2 – Culling Games";
-
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
-    ros-overlay.url = "github:lopsided98/nix-ros-overlay";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    flake-utils.url = "github:numtide/flake-utils";
   };
+  outputs =
+    {
+      flake-utils,
+      nixpkgs,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+        };
 
-  outputs = { self, nixpkgs, ros-overlay }:
-    let
-      linuxSystem = "x86_64-linux";
-      linuxPkgs = import nixpkgs {
-        system = linuxSystem;
-        overlays = [ ros-overlay.overlays.default ];
-      };
-      darwinSystem = "aarch64-darwin";
-      darwinPkgs = import nixpkgs { system = darwinSystem; };
-    in {
-      devShells.${linuxSystem}.default = linuxPkgs.mkShell {
-        buildInputs = with linuxPkgs; [
-          rosPackages.humble.desktop
-          rosPackages.humble.colcon-common-extensions
-          python3Packages.pygame
-          python3Packages.numpy
-        ];
-        shellHook = ''
-          source ${linuxPkgs.rosPackages.humble.desktop}/setup.bash
-          export ROS_LOCALHOST_ONLY=1
+        colconDefaults = pkgs.writeText "defaults.yaml" ''
+          build:
+            cmake-args:
+              - -DPython_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
+              - -DPython3_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
+              - -DPYTHON_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
+              - -DPython3_FIND_STRATEGY=LOCATION
+              - -DPython_FIND_STRATEGY=LOCATION
         '';
-      };
+      in
+      {
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            micromamba
+            cmake
+            pkg-config
+            ninja
+            gnumake
 
-      devShells.${darwinSystem}.default = darwinPkgs.mkShell {
-        shellHook = ''
-          echo "[cg] ROS 2 via Nix só está disponível em x86_64-linux."
-          echo "[cg] Use \"nix develop --system ${linuxSystem}\" dentro de um container/VM Linux (docker, colima, WSL, etc.)."
-          echo "[cg] Este shell Darwin contém apenas utilitários básicos do nixpkgs."
-        '';
-      };
-    };
+            (pkgs.writeShellScriptBin "ros-install" ''
+              #!/usr/bin/env bash
+              micromamba install -y -r "/opt/micromamba" -n ros_env -c conda-forge -c \
+                robostack-humble \
+                ros-humble-desktop \
+                colcon-common-extensions \
+                catkin_tools \
+                rosdep \
+                ros-humble-turtlebot3 \
+                ros-humble-turtlebot3-gazebo \
+                ros-humble-turtlebot3-teleop \
+                ros-humble-example-interfaces \
+                ros-humble-turtlesim \
+                ros-humble-rosidl-default-generators \
+                ros-humble-rosidl-adapter \
+                ros-humble-rosidl-typesupport-c \
+                ros-humble-rosidl-typesupport-cpp \
+                ros-humble-rosidl-typesupport-interface \
+                ros-humble-rosidl-typesupport-introspection-c \
+                ros-humble-rosidl-typesupport-introspection-cpp \
+                pygame \
+                $@
+            '')
+
+            (pkgs.writeShellScriptBin "ros-update" ''
+              #!/usr/bin/env bash
+              micromamba update -y --all -r "/opt/micromamba" -n ros_env
+            '')
+          ];
+
+          shellHook = ''
+            #!/usr/bin/env bash
+            if [ ! -d "/opt/micromamba" ]; then
+                sudo mkdir -p /opt/micromamba
+                sudo chown $USER /opt/micromamba
+            fi
+
+            if micromamba env list -r "/opt/micromamba" | grep -q "ros_env"; then
+              ros-install -q
+
+              source "/opt/micromamba/envs/ros_env/setup.bash"
+            else
+              micromamba create -y -r "/opt/micromamba" -n ros_env -q
+              ros-install
+
+              source "/opt/micromamba/envs/ros_env/setup.bash"
+            fi
+
+            export DYLD_FALLBACK_LIBRARY_PATH="/opt/micromamba/envs/ros_env/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+            export CMAKE_PREFIX_PATH=/opt/micromamba/envs/ros_env:$CMAKE_PREFIX_PATH
+            export COLCON_DEFAULTS_FILE=${colconDefaults}
+
+            # opcional
+            # if [ ! -d "culling_games" ]; then
+            #   echo "cloning cg repo..."
+            #   git clone https://github.com/rmnicola/culling_games.git
+            # fi
+
+            # cd culling_games
+
+            # if [ ! -d "build" ]; then
+            #   echo "running colcon build..."
+            #   colcon build &> /dev/null
+            # fi
+
+            # source install/setup.bash
+
+            # cd ..
+          '';
+        };
+      }
+    );
 }

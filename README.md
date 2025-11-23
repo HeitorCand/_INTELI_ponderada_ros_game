@@ -3,6 +3,9 @@
 Este documento fornece um tutorial sobre como construir, executar e interagir
 com o projeto Culling Games ROS 2.
 
+
+> Use `nix develop` para entrar no ambiente, depois `./run_game.sh` e `./run_teleop.sh`
+
 ## 1. Construindo o Workspace
 
 Antes de executar qualquer parte do projeto, você precisa construir os pacotes.
@@ -140,73 +143,70 @@ ros2 service call /get_map cg_interfaces/srv/GetMap
 Isso retornará uma representação "achatada" da grade do labirinto e suas
 dimensões.
 
-## 7. Rodando com Docker
+## 7. Navegação Autônoma (Partes 1 e 2)
 
-É possível preparar todo o ambiente ROS 2 dentro de um container usando o
-`Dockerfile` incluído no repositório. O container é baseado em
-`ros:humble-desktop` e já traz `colcon` e `pygame` instalados.
+Este repositório contém duas abordagens para navegação autônoma no labirinto:
 
-### 7.1. Pré-requisitos (macOS)
+- **Parte 1 — `cg_autonomous`**: o nó conhece o mapa completo (usa `/get_map`) e calcula o melhor caminho para o alvo (A* ou BFS). Use quando o mapa já está disponível.
+- **Parte 2 — `cg_explorer`**: o nó explora o labirinto usando apenas os sensores locais (sem `/get_map`), monta o mapa localmente (29x29) e, quando o mapa estiver praticamente completo, reseta o jogo e executa o caminho ótimo do robô até o alvo.
 
-1. Instale o [XQuartz](https://www.xquartz.org/).
-2. Abra o XQuartz, vá em *Preferences → Security* e habilite "Allow connections
-     from network clients".
-3. No terminal do macOS (fora do container) execute:
+Resumo das responsabilidades:
+- `cg_autonomous`: recebe o mapa completo, calcula e executa a rota ótima.
+- `cg_explorer`: explora usando sensores, constrói o mapa interno, detecta conclusão (~99%), chama `/reset` e então encontra/executa o caminho ótimo.
 
-     ```bash
-     xhost +127.0.0.1
-     ```
+### Instruções rápidas
 
-### 7.2. Construindo a imagem
-
-Na raiz do repositório execute:
+1) Compile os pacotes necessários:
 
 ```bash
-docker build --platform linux/amd64 -t culling-games:humble .
-```
-
-### 7.3. Iniciando um shell dentro do container
-
-Com o XQuartz rodando, suba o container compartilhando o diretório do projeto:
-
-```bash
-docker run --rm -it \
-    --platform linux/amd64 \
-    --env DISPLAY=host.docker.internal:0 \
-    --volume "$PWD":/workspace \
-    --name cg-dev \
-    culling-games:humble bash
-```
-
-Para máquinas Linux substitua a variável `DISPLAY` e acrescente o socket X11:
-
-```bash
-docker run --rm -it \
-    -e DISPLAY \
-    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    -v "$PWD":/workspace \
-    --name cg-dev \
-    culling-games:humble bash
-```
-
-### 7.4. Compilando e executando no container
-
-Dentro do shell do container:
-
-```bash
-colcon build --symlink-install
+colcon build --packages-select cg_autonomous cg_explorer
 source install/setup.bash
+```
+
+2) Inicie o jogo (em um terminal):
+
+```bash
 ros2 run cg maze
 ```
 
-Em outro shell do mesmo container (ou usando `docker exec -it cg-dev bash`):
+3a) Para o modo **Parte 1** (mapa conhecido):
 
 ```bash
-ros2 run cg_teleop teleop_keyboard
+ros2 run cg_autonomous autonomous_navigator
 ```
 
-Encerrando o container, toda a compilação permanecerá no diretório `build/`
-montado no host.
+3b) Para o modo **Parte 2** (exploração por sensores):
 
+```bash
+ros2 run cg_explorer explorer_node
+```
 
-docker run --rm -it --platform linux/amd64 --env DISPLAY=host.docker.internal:0 --volume "$PWD":/workspace --name cg-dev culling-games:humble bash
+Observações:
+- Execute o jogo (`ros2 run cg maze`) antes de iniciar qualquer nó de navegação.
+- `cg_explorer` monta um mapa 29x29 internamente (`'?'` = desconhecido, `'f'` = livre, `'b'` = barreira, `'t'` = alvo, `'r'` = robô). Quando restarem poucas células desconhecidas, o nó chama `/reset` (modo não aleatório) e então calcula o caminho ótimo do ponto inicial `(1,1)` até o alvo `(14,14)`.
+
+### Testes e variações
+
+- Executar `cg_autonomous` em um mapa específico:
+
+```bash
+# Terminal 1
+ros2 run cg maze -- --map 5.csv
+
+# Terminal 2
+ros2 run cg_autonomous autonomous_navigator
+```
+
+- Executar `cg_explorer` para testar exploração e caminho final:
+
+```bash
+ros2 run cg maze -- --generate
+ros2 run cg_explorer explorer_node
+```
+
+### Notas técnicas
+
+- `cg_autonomous` usa o serviço `/get_map` para obter a representação completa do labirinto e calcula um caminho usando A* (ou BFS em algumas implementações). É adequado para avaliação do algoritmo de pathfinding quando o mapa é conhecido.
+- `cg_explorer` implementa exploração com sensores locais (sem `/get_map`), prioriza células desconhecidas, usa BFS para escapar de becos e, após montar o mapa, realiza o cálculo do caminho ótimo e executa os movimentos.
+
+Se quiser, posso adicionar exemplos de saída do terminal ou instruções de depuração para ambos os módulos.
