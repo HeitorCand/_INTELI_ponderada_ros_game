@@ -3,8 +3,9 @@
 Este documento fornece um tutorial sobre como construir, executar e interagir
 com o projeto Culling Games ROS 2.
 
+https://drive.google.com/file/d/1MopRQuQGbayT_G_DWBV2mR228choWMpA/view?usp=sharing
 
-> Use `nix develop` para entrar no ambiente, depois `./run_game.sh` e `./run_teleop.sh`
+(Vídeo demonstrativo do jogo)[https://drive.google.com/file/d/1MopRQuQGbayT_G_DWBV2mR228choWMpA/view?usp=sharing]
 
 ## 1. Construindo o Workspace
 
